@@ -3,6 +3,8 @@
 #include <string.h>
 #include <cjson/cJSON.h>
 #include <curl/curl.h>
+#include "textColors.h"
+
 #define RETURN_FAILURE 100 // this is stupid
 
 
@@ -52,6 +54,7 @@ double parse_response(Memory* chunk){
 		return RETURN_FAILURE;
 	}
 
+	// Get temperature info
 	cJSON* current = cJSON_GetObjectItem(data, "current");
 	if(!current){
 		fprintf(stderr, "'Current' not found in json\n"
@@ -70,7 +73,40 @@ double parse_response(Memory* chunk){
 	return temp->valuedouble;
 }
 
+char* get_condition(Memory* chunk){
+	
+	cJSON* data = cJSON_Parse(chunk->response);
+	if(!data){
+		fprintf(stderr, "Failed to parse json\n");
+		return RETURN_FAILURE;
+	}
 
+	// Get temperature info
+	cJSON* current = cJSON_GetObjectItem(data, "current");
+	if(!current){
+		fprintf(stderr, "'Current' not found in json\n"
+				"Did you make a typo?\n");
+		cJSON_Delete(data);
+		return RETURN_FAILURE;
+	}
+	cJSON* condition = cJSON_GetObjectItem(current, "condition");
+	if(!condition){
+		fprintf(stderr, "Field 'condition' not found in json\n");
+		cJSON_Delete(data);
+		return RETURN_FAILURE;
+	}
+
+	cJSON* condition_desc = cJSON_GetObjectItem(condition, "text");
+	if(!condition_desc){
+		fprintf(stderr, "Condition text not found in json\n");
+		cJSON_Delete(data);
+		return RETURN_FAILURE;
+	}
+
+	char* res = strdup(condition_desc->valuestring);
+	cJSON_Delete(data);
+	return res;
+}
 
 // Handle api data
 size_t response_callback(
@@ -113,8 +149,7 @@ int main(int argc, char** argv){
 		char* api_key = get_api_key();
 		char url[128];
 		snprintf(url, sizeof(url),
-				"http://api.weatherapi.com/v1/current.json?key=%s&q=%s&aqi=no",
-				api_key, city);
+				"http://api.weatherapi.com/v1/current.json?key=%s&q=%s&aqi=no", api_key, city);
 		if(api_key == NULL){
 			fprintf(stderr, "api key is null\n");
 			exit(EXIT_FAILURE);
@@ -146,12 +181,28 @@ int main(int argc, char** argv){
 		free(api_key);
 		curl_easy_cleanup(curl);
 	}
+
 	const double temp = parse_response(&chunk);
+	const char* condition = get_condition(&chunk); // Caller must free
+	int text_color;
+
+	if(temp >= 25){
+		text_color = 31; // Red
+	} else if(temp >= 17){ 
+		text_color = 33; // Yellow 
+	} else {
+		text_color = 32; // Green
+	}
+	change_color(text_color);
 	printf(temp == RETURN_FAILURE ?
 			"Something went wrong\n" :
 			"Current temperature in %s: %.2f°C\n", city, temp);
 
+	change_color(0);
+	printf("Weather condition is %s\n", condition);
+
 	free(chunk.response);
 	free(city);
+	free(condition);
         return 0;
 }
