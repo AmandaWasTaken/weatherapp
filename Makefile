@@ -4,5 +4,5 @@ main: main.c
 dev: main.c
 	gcc -o main main.c -lcurl -lcjson -Wall -Wextra -Wpedantic
 
-install: main
+lmain: main
 	sudo cp main /usr/bin/weather
